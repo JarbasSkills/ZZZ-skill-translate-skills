@@ -118,14 +118,14 @@ class SkillTranslateSkill(MycroftSkill):
         translated = []
         if not exists(lang_dialog):
             mkdir(lang_dialog)
-            for file in listdir(en_dialog):
-                if ".dialog" in file and file not in listdir(lang_dialog):
-                    with open(join(en_dialog, file), "r") as f:
-                        lines = f.readlines()
-                        for line in lines:
-                            translated.append(self.translate(line))
-                    with open(join(lang_dialog, file), "w") as f:
-                        f.writelines(translated)
+        for file in listdir(en_dialog):
+            if ".dialog" in file and file not in listdir(lang_dialog):
+                with open(join(en_dialog, file), "r") as f:
+                    lines = f.readlines()
+                    for line in lines:
+                        translated.append(self.translate(line))
+                with open(join(lang_dialog, file), "w") as f:
+                    f.writelines(translated)
 
         return translated
 
