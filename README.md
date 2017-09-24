@@ -8,6 +8,10 @@ Triggered on every boot or with
 
 Recommended to be made into a Priority Skill
 
+# supported languages
+
+https://translate.google.com/intl/en/about/languages/
+
 # TODO
 
 - translate to "language" intent
