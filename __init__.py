@@ -26,6 +26,7 @@ from os import mkdir, listdir
 from adapt.intent import IntentBuilder
 from mycroft.skills.core import MycroftSkill
 from mycroft import MYCROFT_ROOT_PATH
+# TODO consider http://pythonhosted.org/py-translate/index.html
 from mtranslate import translate
 import unicodedata
 
@@ -36,7 +37,9 @@ class SkillTranslateSkill(MycroftSkill):
     def __init__(self):
         super(SkillTranslateSkill, self).__init__()
         self.skills_dir = abspath(dirname(dirname(__file__)))
-        self.supported_languages = []
+        # TODO list of supported langs
+        # NOTE check if google supports most lang codes
+        self.unsupported_languages = []
         if self.validate_language():
             self.translate_skills()
             self.translate_core()
@@ -47,7 +50,7 @@ class SkillTranslateSkill(MycroftSkill):
         self.register_intent(intent, self.handle_intent)
 
     def validate_language(self):
-        if self.lang in self.supported_languages:
+        if self.lang not in self.unsupported_languages:
             return True
         return False
 
