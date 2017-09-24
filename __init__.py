@@ -92,6 +92,7 @@ class SkillTranslateSkill(MycroftSkill):
                 for idx, line in enumerate(lines):
                     # get hardcoded speak text messages
                     tags = speak.findall(line)
+                    # if " or ' in speak it is not a var, else filter
                     tags = [tag.replace("'", '').replace('"', "") for tag in
                             tags if ("'" in tag or '"' in tag)]
                     if not len(tags):
@@ -106,8 +107,9 @@ class SkillTranslateSkill(MycroftSkill):
                             with open(new_dialog, "w") as f:
                                 f.write(tag)
                         # replace speak with speak_dialog
-                        line = line.replace("self.speak(",
-                                            "self.speak_dialog(")
+                        line = line.replace("'", "").replace('"', "")
+                        line = line.replace("self.speak(" + tag,
+                                            "self.speak_dialog('" + tag + "'")
                         lines[idx] = line
                         save_flag = True
                         self.log.debug(line)
