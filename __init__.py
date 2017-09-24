@@ -93,7 +93,7 @@ class SkillTranslateSkill(MycroftSkill):
                     # get hardcoded speak text messages
                     tags = speak.findall(line)
                     tags = [tag.replace("'", '').replace('"', "") for tag in
-                            tags]
+                            tags if ("'" in tag or '"' in tag)]
                     if not len(tags):
                         continue
                     processed.append(tags)
