@@ -65,7 +65,8 @@ class SkillTranslateSkill(MycroftSkill):
                 if not exists(lang_folder):
                     mkdir(lang_folder)
                 for dialog_file in listdir(en_dialog):
-                    if ".dialog" in dialog_file:
+                    if ".dialog" in dialog_file and dialog_file not in \
+                            listdir(lang_folder):
                         translated_dialog = []
                         with open(join(en_dialog, dialog_file), "r") as f:
                             lines = f.readlines()
@@ -81,7 +82,8 @@ class SkillTranslateSkill(MycroftSkill):
                 if not exists(lang_folder):
                     mkdir(lang_folder)
                 for vocab_file in listdir(en_vocab):
-                    if ".voc" in vocab_file:
+                    if ".voc" in vocab_file and vocab_file not in listdir(
+                            lang_folder):
                         translated_voc = []
                         with open(join(en_vocab, vocab_file), "r") as f:
                             lines = f.readlines()
@@ -98,7 +100,8 @@ class SkillTranslateSkill(MycroftSkill):
                 if not exists(lang_folder):
                     mkdir(lang_folder)
                 for regex_file in listdir(en_regex):
-                    if ".rx" in regex_file:
+                    if ".rx" in regex_file and regex_file not in listdir(
+                            lang_folder):
                         translated_regex = []
                         with open(join(en_regex, regex_file), "r") as f:
                             lines = f.readlines()
