@@ -38,6 +38,7 @@ class SkillTranslateSkill(MycroftSkill):
     def __init__(self):
         super(SkillTranslateSkill, self).__init__()
         self.skills_dir = abspath(dirname(dirname(__file__)))
+        self.reload_skill = False
         # TODO list of supported langs
         # NOTE check if google supports most lang codes
         self.unsupported_languages = []
@@ -50,14 +51,19 @@ class SkillTranslateSkill(MycroftSkill):
             require("AutoTranslateKeyword").build()
         self.register_intent(intent, self.handle_intent)
 
+        self.emitter.on("skills.auto_translate", self.translate_skills_dispatch)
+
+    def translate_skills_dispatch(self, message):
+        self.translate_skills()
+
     def full_translate_to(self, lang=None):
         ''' translate all skills to target language '''
         lang = lang or self.lang
         if self.validate_language(lang):
             self.log.info("Starting automatic translation")
             self.speak_to_dialogs()
-            self.translate_skills()
-            self.translate_core()
+            self.translate_skills(lang)
+            self.translate_core(lang)
         else:
             self.log.info("Automatic translation not available for " + lang)
 
@@ -86,8 +92,8 @@ class SkillTranslateSkill(MycroftSkill):
                 lines = f.readlines()
                 # save backup
                 self.log.info("Saving backup of " + folder)
-                if not exists(join(skill_path, ".backup")):
-                    with open(join(skill_path, ".backup"), "w") as b:
+                if not exists(skill_path + ".backup"):
+                    with open(skill_path + ".backup", "w") as b:
                         b.writelines(lines)
                 for idx, line in enumerate(lines):
                     # get hardcoded speak text messages
@@ -120,8 +126,10 @@ class SkillTranslateSkill(MycroftSkill):
                     f.writelines(lines)
             return processed
 
-    def translate_skills(self):
+    def translate_skills(self, lang=None):
         ''' translate skills vocab/dialog/regex '''
+        if lang is None:
+            lang = self.lang
         translated_skills = []
         for folder in listdir(self.skills_dir):
             # check if is a skill
@@ -130,13 +138,15 @@ class SkillTranslateSkill(MycroftSkill):
             if not exists(skill_path):
                 return []
             # translate dialogfiles
-            dialog = join(folder_path, "vocab")
+            dialog = join(folder_path, "dialog")
             en_dialog = join(dialog, "en-us")
 
             self.log.info("Translating dialog for " + folder)
             if exists(en_dialog):
-                lang_folder = join(dialog, self.lang)
+                lang_folder = join(dialog, lang)
                 if not exists(lang_folder):
+                    self.log.info("Creating dialog language folder for " +
+                                  lang)
                     mkdir(lang_folder)
                 for dialog_file in listdir(en_dialog):
                     if ".dialog" in dialog_file and dialog_file not in \
@@ -146,7 +156,8 @@ class SkillTranslateSkill(MycroftSkill):
                         with open(join(en_dialog, dialog_file), "r") as f:
                             lines = f.readlines()
                             for line in lines:
-                                translated_dialog.append(self.translate(line))
+                                translated_dialog.append(self.translate(
+                                    line)+" \n")
                         with open(join(lang_folder, dialog_file), "w") as f:
                             f.writelines(translated_dialog)
                         self.log.debug(translated_dialog)
@@ -156,8 +167,10 @@ class SkillTranslateSkill(MycroftSkill):
             vocab = join(folder_path, "vocab")
             en_vocab = join(vocab, "en-us")
             if exists(en_vocab):
-                lang_folder = join(vocab, self.lang)
+                lang_folder = join(vocab, lang)
                 if not exists(lang_folder):
+                    self.log.info("Creating vocab language folder for " +
+                                  lang)
                     mkdir(lang_folder)
                 for vocab_file in listdir(en_vocab):
                     if ".voc" in vocab_file and vocab_file not in listdir(
@@ -167,7 +180,8 @@ class SkillTranslateSkill(MycroftSkill):
                         with open(join(en_vocab, vocab_file), "r") as f:
                             lines = f.readlines()
                             for line in lines:
-                                translated_voc.append(self.translate(line))
+                                translated_voc.append(self.translate(
+                                    line)+" \n")
                         with open(join(lang_folder, vocab_file), "w") as f:
                             f.writelines(translated_voc)
                         self.log.debug(translated_voc)
@@ -178,7 +192,7 @@ class SkillTranslateSkill(MycroftSkill):
             regex = join(folder_path, "regex")
             en_regex = join(regex, "en-us")
             if exists(en_regex):
-                lang_folder = join(regex, self.lang)
+                lang_folder = join(regex, lang)
                 if not exists(lang_folder):
                     mkdir(lang_folder)
                 for regex_file in listdir(en_regex):
@@ -189,18 +203,34 @@ class SkillTranslateSkill(MycroftSkill):
                         with open(join(en_regex, regex_file), "r") as f:
                             lines = f.readlines()
                             for line in lines:
-                                translated_regex.append(self.translate(line))
+                                translated_regex.append(self.translate(
+                                    line)+" \n")
+                        # restore regex vars
+                        self.log.info("Restoring regex var names")
+                        original_tags = []
+                        translated_tags = []
+                        for line in lines:
+                            original_tags = re.findall('<[^>]*>', line)
+                        for line in translated_regex:
+                            translated_tags = re.findall('<[^>]*>', line)
+                        for idx, tag in enumerate(original_tags):
+                            for idr, line in enumerate(translated_regex):
+                                translated_regex[idr] = line.replace(
+                                                    translated_tags[idx],
+                                                    original_tags[idx])
                         with open(join(lang_folder, regex_file), "w") as f:
                             f.writelines(translated_regex)
                         self.log.debug(translated_regex)
 
         return translated_skills
 
-    def translate_core(self):
+    def translate_core(self, lang=None):
         ''' translate core dialog files '''
-        dialog_path = join(MYCROFT_ROOT_PATH, "res", "dialog")
+        if lang is None:
+            lang = self.lang
+        dialog_path = join(MYCROFT_ROOT_PATH, "mycroft/res/text")
         en_dialog = join(dialog_path, "en-us")
-        lang_dialog = join(dialog_path, self.lang)
+        lang_dialog = join(dialog_path, lang)
         if not exists(en_dialog):
             return []
         translated = []
@@ -213,7 +243,7 @@ class SkillTranslateSkill(MycroftSkill):
                 with open(join(en_dialog, file), "r") as f:
                     lines = f.readlines()
                     for line in lines:
-                        translated.append(self.translate(line))
+                        translated.append(self.translate(line)+ " \n")
                 with open(join(lang_dialog, file), "w") as f:
                     f.writelines(translated)
                 self.log.debug(translated)
