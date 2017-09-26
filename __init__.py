@@ -26,6 +26,7 @@ from os import mkdir, listdir
 from adapt.intent import IntentBuilder
 from mycroft.skills.core import MycroftSkill
 from mycroft import MYCROFT_ROOT_PATH
+from mycroft.util.parse import normalize
 # TODO consider http://pythonhosted.org/py-translate/index.html
 from mtranslate import translate
 import unicodedata
@@ -155,12 +156,36 @@ class SkillTranslateSkill(MycroftSkill):
                         translated_dialog = []
                         with open(join(en_dialog, dialog_file), "r") as f:
                             lines = f.readlines()
+                            original_tags = []
+                            translated_tags = []
                             for line in lines:
-                                translated_dialog.append(self.translate(
-                                    line)+" \n")
+                                original_tags += re.findall('\{\{[^}]*\}\}',
+                                                            line)
+                                translated = self.translate(line)+" \n"
+                                translated_dialog.append(translated)
+                                translated_tags += re.findall('\{\{[^}]*\}\}',
+                                                              translated)
+                                for idx, tag in enumerate(original_tags):
+                                    for idr, line in enumerate(translated_dialog):
+                                        try:
+                                            # restore var names
+                                            fixed = line.replace(translated_tags[idx],
+                                                                    original_tags[idx].replace(" ", ""))
+                                            words = fixed.split(" ")
+                                            for i, w in enumerate(words):
+                                                # translation randomly removes starting {{
+                                                if "}}" in w and "{{" not in w:
+                                                    words[i] = "{{"+w
+                                                if "{{" in w and "}}" not in w:
+                                                    words[i] += "}}"
+                                            fixed = " ".join(words)
+                                            translated_dialog[idr] = fixed
+                                        except:
+                                            self.log.error(dialog_file + " " \
+                                                           "needs manual fixing")
+
                         with open(join(lang_folder, dialog_file), "w") as f:
                             f.writelines(translated_dialog)
-                        self.log.debug(translated_dialog)
 
             # translate vocab files
             self.log.info("Translating vocab for " + folder)
@@ -184,7 +209,6 @@ class SkillTranslateSkill(MycroftSkill):
                                     line)+" \n")
                         with open(join(lang_folder, vocab_file), "w") as f:
                             f.writelines(translated_voc)
-                        self.log.debug(translated_voc)
 
             # TODO parse regex better, keywords must not be translated
             # translate regex
@@ -206,21 +230,29 @@ class SkillTranslateSkill(MycroftSkill):
                                 translated_regex.append(self.translate(
                                     line)+" \n")
                         # restore regex vars
-                        self.log.info("Restoring regex var names")
                         original_tags = []
                         translated_tags = []
+                        parenthesis = []
                         for line in lines:
-                            original_tags = re.findall('<[^>]*>', line)
+                            original_tags += re.findall('<[^>]*>', line)
                         for line in translated_regex:
-                            translated_tags = re.findall('<[^>]*>', line)
+                            translated_tags += re.findall('<[^>]*>', line)
+                            parenthesis += re.findall('\([^)]*\)', line)
                         for idx, tag in enumerate(original_tags):
                             for idr, line in enumerate(translated_regex):
-                                translated_regex[idr] = line.replace(
-                                                    translated_tags[idx],
-                                                    original_tags[idx])
+                                # fix spaces
+                                for p in parenthesis:
+                                    if p in line:
+                                        line = line.replace(p, p.replace(" ",
+                                                                         ""))
+                                # restore var names
+                                fixed = line.replace(translated_tags[idx],
+                                                        original_tags[idx])
+
+                                translated_regex[idr] = fixed
+
                         with open(join(lang_folder, regex_file), "w") as f:
                             f.writelines(translated_regex)
-                        self.log.debug(translated_regex)
 
         return translated_skills
 
