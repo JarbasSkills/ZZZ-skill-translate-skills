@@ -24,11 +24,11 @@ from os.path import dirname, exists, abspath, join
 from os import mkdir, listdir
 
 from adapt.intent import IntentBuilder
-from mycroft.skills.core import MycroftSkill
+from mycroft.skills.core import MycroftSkill, intent_handler, intent_file_handler
 from mycroft import MYCROFT_ROOT_PATH
-from mycroft.util.parse import normalize
 # TODO consider http://pythonhosted.org/py-translate/index.html
 from mtranslate import translate
+from mycroft.configuration.config import LocalConf, USER_CONFIG
 import unicodedata
 import re
 
@@ -40,18 +40,65 @@ class SkillTranslateSkill(MycroftSkill):
         super(SkillTranslateSkill, self).__init__()
         self.skills_dir = abspath(dirname(dirname(__file__)))
         self.reload_skill = False
-        # TODO list of supported langs
-        # NOTE check if google supports most lang codes
+        self.lang_map = {
+            'af': 'Afrikaans',
+            'sq': 'Albanian',
+            'ar': 'Arabic',
+            'hy': 'Armenian',
+            'bn': 'Bengali',
+            'ca': 'Catalan',
+            'zh': 'Chinese',
+            'zh-cn': 'Chinese (Mandarin/China)',
+            'zh-tw': 'Chinese (Mandarin/Taiwan)',
+            'zh-yue': 'Chinese (Cantonese)',
+            'hr': 'Croatian',
+            'cs': 'Czech',
+            'da': 'Danish',
+            'nl': 'Dutch',
+            'en': 'English',
+            'en-au': 'English (Australia)',
+            'en-uk': 'English (United Kingdom)',
+            'en-us': 'English (United States)',
+            'eo': 'Esperanto',
+            'fi': 'Finnish',
+            'fr': 'French',
+            'de': 'German',
+            'el': 'Greek',
+            'hi': 'Hindi',
+            'hu': 'Hungarian',
+            'is': 'Icelandic',
+            'id': 'Indonesian',
+            'it': 'Italian',
+            'ja': 'Japanese',
+            'km': 'Khmer (Cambodian)',
+            'ko': 'Korean',
+            'la': 'Latin',
+            'lv': 'Latvian',
+            'mk': 'Macedonian',
+            'no': 'Norwegian',
+            'pl': 'Polish',
+            'pt': 'Portuguese',
+            'ro': 'Romanian',
+            'ru': 'Russian',
+            'sr': 'Serbian',
+            'si': 'Sinhala',
+            'sk': 'Slovak',
+            'es': 'Spanish',
+            'es-es': 'Spanish (Spain)',
+            'es-us': 'Spanish (United States)',
+            'sw': 'Swahili',
+            'sv': 'Swedish',
+            'ta': 'Tamil',
+            'th': 'Thai',
+            'tr': 'Turkish',
+            'uk': 'Ukrainian',
+            'vi': 'Vietnamese',
+            'cy': 'Welsh'
+        }
         self.unsupported_languages = []
         self.full_translate_to(self.lang)
 
     def initialize(self):
-        # TODO translate yourself to "lang" intent
-
-        intent = IntentBuilder("AutoTranslateIntent"). \
-            require("AutoTranslateKeyword").build()
-        self.register_intent(intent, self.handle_intent)
-
         self.emitter.on("skills.auto_translate", self.translate_skills_dispatch)
 
     def translate_skills_dispatch(self, message):
@@ -72,7 +119,13 @@ class SkillTranslateSkill(MycroftSkill):
         ''' ensure language is supported by google translate '''
         lang = lang or self.lang
         if lang not in self.unsupported_languages:
-            return True
+            if lang in self.lang_map:
+                return True
+            if lang[:2] in self.lang_map:
+                return True
+            for l in self.lang_map:
+                if self.lang_map[l].lower() == lang.lower():
+                    return True
         return False
 
     def speak_to_dialogs(self):
@@ -104,6 +157,10 @@ class SkillTranslateSkill(MycroftSkill):
                             tags if ("'" in tag or '"' in tag)]
                     if not len(tags):
                         continue
+                    # if some of these symbols is in the tag it is a string operation, leave it
+                    symbols = ["+", "-", "/", "*", "[", "]", "(", ")"]
+                    for s in symbols:
+                        tags = [tag for tag in tags if s not in tag]
                     processed.append(tags)
                     self.log.info("Converting self.speak to "
                                   "self.speak_dialog")
@@ -126,6 +183,43 @@ class SkillTranslateSkill(MycroftSkill):
                 with open(skill_path, "w") as f:
                     f.writelines(lines)
             return processed
+
+    def make_skills_auto_tx(self):
+        for folder in listdir(self.skills_dir):
+            # check if is a skill
+            folder_path = join(self.skills_dir, folder)
+            skill_path = join(folder_path, "__init__.py")
+            if not exists(skill_path):
+                return []
+            with open(skill_path, "r") as f:
+                skill = f.read()
+                # save backup
+                self.log.info("Saving backup of " + folder)
+                if not exists(skill_path + ".autotx_backup"):
+                    with open(skill_path + ".autotx_backup", "w") as b:
+                        b.write(skill)
+                if "MycroftSkill" not in skill:
+                    # TODO fallbacks
+                    continue
+                skill = skill.replace("MycroftSkill", "AutotranslatableSkill")
+                lines = skill.split("\n")
+                for idx, line in enumerate(lines):
+                    if line.startswith("#"):
+                        continue
+                    lines.insert(idx, "from mycroft_jarbas_utils.skills.auto_translatable import AutotranslatableSkill")
+                    break
+                lines.insert(0, "# skill auto translated ")
+                skill = "".join(lines)
+                with open(skill_path, "w") as b:
+                    b.write(skill)
+                reqs = join(folder_path, "requirements.txt")
+                r = []
+                if exists(reqs):
+                    with open(reqs, "r") as b:
+                        r = b.readlines()
+                r.append("mycroft_jarbas_utils")
+                with open(reqs, "w") as b:
+                    b.writelines(r)
 
     def translate_skills(self, lang=None):
         ''' translate skills vocab/dialog/regex '''
@@ -210,6 +304,52 @@ class SkillTranslateSkill(MycroftSkill):
                         with open(join(lang_folder, vocab_file), "w") as f:
                             f.writelines(translated_voc)
 
+            # translate entity files
+            self.log.info("Translating entities for " + folder)
+            vocab = join(folder_path, "vocab")
+            en_vocab = join(vocab, "en-us")
+            if exists(en_vocab):
+                lang_folder = join(vocab, lang)
+                if not exists(lang_folder):
+                    self.log.info("Creating vocab language folder for " +
+                                  lang)
+                    mkdir(lang_folder)
+                for vocab_file in listdir(en_vocab):
+                    if ".entity" in vocab_file and vocab_file not in listdir(
+                            lang_folder):
+                        self.log.info("Translating " + vocab_file)
+                        translated_voc = []
+                        with open(join(en_vocab, vocab_file), "r") as f:
+                            lines = f.readlines()
+                            for line in lines:
+                                translated_voc.append(self.translate(
+                                    line) + " \n")
+                        with open(join(lang_folder, vocab_file), "w") as f:
+                            f.writelines(translated_voc)
+
+            # translate intent files
+            self.log.info("Translating intents for " + folder)
+            vocab = join(folder_path, "vocab")
+            en_vocab = join(vocab, "en-us")
+            if exists(en_vocab):
+                lang_folder = join(vocab, lang)
+                if not exists(lang_folder):
+                    self.log.info("Creating vocab language folder for " +
+                                  lang)
+                    mkdir(lang_folder)
+                for vocab_file in listdir(en_vocab):
+                    if ".intent" in vocab_file and vocab_file not in listdir(
+                            lang_folder):
+                        self.log.info("Translating " + vocab_file)
+                        translated_voc = []
+                        with open(join(en_vocab, vocab_file), "r") as f:
+                            lines = f.readlines()
+                            for line in lines:
+                                translated_voc.append(self.translate(
+                                    line) + " \n")
+                        with open(join(lang_folder, vocab_file), "w") as f:
+                            f.writelines(translated_voc)
+
             # TODO parse regex better, keywords must not be translated
             # translate regex
             self.log.info("Translating regex for " + folder)
@@ -284,12 +424,21 @@ class SkillTranslateSkill(MycroftSkill):
     def translate(self, text, lang=None):
         ''' translate text to lang '''
         lang = lang or self.lang
+        if lang[:2] in self.lang_map and lang not in self.lang_map:
+            lang = lang[:2]
+        elif lang not in self.lang_map:
+            for l in self.lang_map:
+                if self.lang_map[l].lower() == lang.lower():
+                    lang = l
+                    break
         sentence = translate(text, lang)
         translated = unicodedata.normalize('NFKD', sentence).encode('ascii',
                                                                     'ignore')
         return translated
 
-    def handle_intent(self, message):
+    @intent_handler(IntentBuilder("AutoTranslateIntent"). \
+            require("AutoTranslateKeyword"))
+    def handle_auto_tx_intent(self, message):
         ''' translate yourself intent '''
         if self.validate_language():
             self.speak_dialog("translating_skills")
@@ -300,9 +449,48 @@ class SkillTranslateSkill(MycroftSkill):
         else:
             self.speak_dialog("invalid_language", {"language": self.lang})
 
-    def stop(self):
-        pass
+    @intent_file_handler("translate_to.intent")
+    def handle_auto_tx_to_lang_intent(self, message):
+        lang = message.data.get("lang", self.lang)
+        if self.validate_language(lang):
+            self.speak_dialog("translating_skills")
+            if len(self.translate_core()):
+                self.speak_dialog("translated_core")
+            for skill in self.translate_skills():
+                self.speak(skill)
+        else:
+            self.speak_dialog("invalid_language", {"language": self.lang})
+
+    @intent_handler(IntentBuilder("AutoTranslateSkillsIntent"). \
+                    require("AutoTranslateSkillsKeyword"))
+    def handle_auto_tx_skills_intent(self, message):
+        ''' translate yourself intent '''
+        self.make_skills_auto_tx()
+        self.speak_dialog("auto_tx_skills")
+
+    @intent_file_handler("change_lang_to.intent")
+    def handle_change_lang_intent(self, message):
+        lang = message.data.get("lang", self.lang)
+        if self.validate_language(lang):
+            if lang[:2] in self.lang_map and lang not in self.lang_map:
+                lang = lang[:2]
+            elif lang not in self.lang_map:
+                for l in self.lang_map:
+                    if self.lang_map[l].lower() == lang.lower():
+                        lang = l
+                        break
+            lang_name = lang
+            if lang_name in self.lang_map:
+                lang_name = self.lang_map[lang_name]
+            self.speak_dialog("new_lang", {"language": lang_name})
+            conf = LocalConf(USER_CONFIG)
+            conf['lang'] = lang
+            conf.store()
+            self.emitter.emit(message.reply("mycroft.reboot"))
+        else:
+            self.speak_dialog("invalid_language", {"language": self.lang})
 
 
 def create_skill():
     return SkillTranslateSkill()
+

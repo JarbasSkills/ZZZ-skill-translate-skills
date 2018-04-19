@@ -1,0 +1,3 @@
+change language to {{ lang }}
+switch language to {{ lang }}
+use {{ lang }} language
