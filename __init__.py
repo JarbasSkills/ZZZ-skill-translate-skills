@@ -499,7 +499,7 @@ class SkillTranslateSkill(MycroftSkill):
             tts = self.config_core["tts"]
             tts["module"] = "google"
             conf["tts"] = tts
-            self.emitter.emit(message.reply("mycroft.reboot"))
+            self.emitter.emit(message.reply("mycroft.reboot", {}))
         else:
             self.speak_dialog("invalid_language", {"language": self.lang})
 
