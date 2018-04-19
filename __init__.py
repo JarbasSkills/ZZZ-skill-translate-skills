@@ -485,7 +485,7 @@ class SkillTranslateSkill(MycroftSkill):
             self.speak_dialog("new_lang", {"language": lang_name})
             conf = LocalConf(USER_CONFIG)
             conf['lang'] = lang
-            conf.store()
+
             stt = self.config_core["stt"]
             stt["module"] = "google"
             if "google" not in stt:
@@ -499,6 +499,7 @@ class SkillTranslateSkill(MycroftSkill):
             tts = self.config_core["tts"]
             tts["module"] = "google"
             conf["tts"] = tts
+            conf.store()
             self.emitter.emit(message.reply("mycroft.reboot", {}))
         else:
             self.speak_dialog("invalid_language", {"language": self.lang})
