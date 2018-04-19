@@ -486,6 +486,19 @@ class SkillTranslateSkill(MycroftSkill):
             conf = LocalConf(USER_CONFIG)
             conf['lang'] = lang
             conf.store()
+            stt = self.config_core["stt"]
+            stt["module"] = "google"
+            if "google" not in stt:
+                stt["google"] = {}
+            if "credential" not in stt["google"]:
+                stt["google"] = {"credential": {}}
+            if "token" not in stt["google"]["credential"]:
+                stt["google"]["credential"] = "AIzaSyBOti4mM-6x9WDnZIjIeyEU21OpBXqWBgw"
+            conf["stt"] = "google"
+
+            tts = self.config_core["tts"]
+            tts["module"] = "google"
+            conf["tts"] = tts
             self.emitter.emit(message.reply("mycroft.reboot"))
         else:
             self.speak_dialog("invalid_language", {"language": self.lang})
